@@ -1,4 +1,4 @@
-# PharmaChain v2
+# PharmaChain
 
 Role-based pharmaceutical supply-chain integrity on the **Ethereum Sepolia
 testnet**: whitelisted participants, hash-anchored QC certificates, a full
