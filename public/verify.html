@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PharmaChain - Verify a batch</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0b0f14; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body class="min-h-screen text-slate-200 antialiased">
+<div class="max-w-2xl mx-auto px-5 py-8">
+  <div class="flex items-center gap-3 mb-6">
+    <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-xl">💊</div>
+    <div>
+      <h1 class="text-xl font-semibold text-white">Verify a medicine batch</h1>
+      <p class="text-xs text-slate-500">For pharmacists, auditors and patients. Read straight from the blockchain, free, no login.</p>
+    </div>
+  </div>
+
+  <form id="form" class="flex gap-2 mb-6">
+    <input id="q" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-200" placeholder="Lot number (e.g. PFZ-2201 | Rotavirus Vaccine) or batch ID (0x...)" />
+    <button class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-5 rounded-lg">Verify</button>
+  </form>
+
+  <div id="out"></div>
+  <p class="text-xs text-slate-600 mt-8">Tip: the lot text must match exactly what the manufacturer registered, in the form <span class="mono">LOT | Product</span>. A batch the chain has never seen is shown as UNKNOWN, which is how a counterfeit appears.</p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const short = (a) => a ? a.slice(0, 6) + "..." + a.slice(-4) : "";
+const V = {
+  GENUINE: ["GENUINE", "bg-emerald-950 border-emerald-700 text-emerald-200", "✔"],
+  UNCERTIFIED: ["NOT YET CERTIFIED", "bg-amber-950 border-amber-700 text-amber-200", "!"],
+  BREACHED: ["COLD CHAIN BROKEN", "bg-rose-950 border-rose-700 text-rose-200", "✖"],
+  RECALLED: ["RECALLED", "bg-fuchsia-950 border-fuchsia-700 text-fuchsia-200", "✖"],
+  UNKNOWN: ["UNKNOWN - LIKELY COUNTERFEIT", "bg-red-950 border-red-700 text-red-200", "?"],
+};
+
+function chart(temps, min, max) {
+  const W = 560, H = 150, P = 26;
+  if (!temps.length) return `<div class="text-xs text-slate-500">No temperature readings logged.</div>`;
+  const vals = temps.map((t) => t.reading);
+  const lo = Math.min(min, ...vals) - 2, hi = Math.max(max, ...vals) + 2;
+  const y = (v) => P + (H - 2 * P) * (1 - (v - lo) / (hi - lo));
+  const x = (i) => P + (temps.length === 1 ? (W - 2 * P) / 2 : ((W - 2 * P) * i) / (temps.length - 1));
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full">
+    <rect x="${P}" y="${y(max)}" width="${W - 2 * P}" height="${y(min) - y(max)}" fill="rgba(16,185,129,0.10)"/>
+    <polyline points="${temps.map((t, i) => `${x(i)},${y(t.reading)}`).join(" ")}" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    ${temps.map((t, i) => `<circle cx="${x(i)}" cy="${y(t.reading)}" r="5" fill="${t.outOfRange ? "#f43f5e" : "#34d399"}"/><text x="${x(i)}" y="${y(t.reading) - 9}" text-anchor="middle" fill="#cbd5e1" font-size="10">${t.reading.toFixed(1)}</text>`).join("")}
+    <text x="${P + 4}" y="${y(min) + 13}" text-anchor="start" fill="#10b981" font-size="10">safe range ${min} to ${max} &deg;C</text>
+  </svg>`;
+}
+
+async function verify(q) {
+  $("out").innerHTML = `<div class="text-sm text-slate-500">Reading the blockchain...</div>`;
+  try {
+    const res = await fetch("/api/verify?q=" + encodeURIComponent(q));
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error);
+    const [title, cls, icon] = V[d.verdict] || V.UNKNOWN;
+    let html = `<div class="border rounded-2xl p-5 ${cls}"><div class="flex items-center gap-3"><div class="text-3xl">${icon}</div><div><div class="text-lg font-semibold">${title}</div><div class="text-sm opacity-80">${esc(d.message)}</div></div></div></div>`;
+    if (d.verdict !== "UNKNOWN") {
+      const b = d.batch;
+      html += `<div class="mt-5 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div><div class="text-white font-medium">${esc(b.label)}</div>
+        <div class="text-xs text-slate-500 mono mt-1">QC certificate hash: ${esc(b.certHash)}</div>
+        <div class="text-xs text-slate-500 mt-1">Safe range ${b.minTemp} to ${b.maxTemp} &deg;C &middot; manufacturer <span class="mono">${short(b.manufacturer)}</span></div></div>
+        <div><div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Chain of custody</div>
+          ${d.custody.map((c, i) => `<div class="flex gap-3 items-start mb-1.5"><div class="mt-1.5 w-2 h-2 rounded-full ${i === d.custody.length - 1 ? "bg-emerald-400" : "bg-slate-600"}"></div><div class="text-sm"><span class="capitalize">${esc(c.role.toLowerCase())}</span> <span class="mono text-xs text-slate-500">${short(c.holder)}</span> <span class="text-xs text-slate-600">&middot; ${new Date(c.timestamp * 1000).toLocaleString()}</span></div></div>`).join("")}</div>
+        <div><div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Temperature log</div>${chart(d.temps, b.minTemp, b.maxTemp)}</div>
+        ${d.contract.explorerUrl ? `<a class="text-xs text-emerald-400 underline" target="_blank" href="${d.contract.explorerUrl}">View the contract on Etherscan</a>` : ""}
+      </div>`;
+    }
+    $("out").innerHTML = html;
+  } catch (e) {
+    $("out").innerHTML = `<div class="text-sm text-rose-300">${esc(e.message)}</div>`;
+  }
+}
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); const q = $("q").value.trim(); if (q) { history.replaceState(null, "", "?q=" + encodeURIComponent(q)); verify(q); } });
+const initial = new URLSearchParams(location.search).get("q");
+if (initial) { $("q").value = initial; verify(initial); }
+</script>
+</body>
+</html>
