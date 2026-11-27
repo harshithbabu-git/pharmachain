@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- *  PharmaChain v2 - role-based pharma supply-chain integrity on Ethereum Sepolia
+ *  PharmaChain - role-based pharma supply-chain integrity on Ethereum Sepolia
  * ============================================================================
  *
  *  RUN:   node server.js        (then open http://localhost:3000)
@@ -21,7 +21,7 @@
  *   - /api/attack lets you show, live, that unauthorised actions are REJECTED
  *     by the contract itself (not by this server).
  *
- *  REAL vs SIMULATED (say this in the presentation):
+ *  REAL vs SIMULATED:
  *   REAL:      contract, deployment, every register/certify/transfer/log/recall
  *              transaction, every hash on Etherscan, every rejection reason.
  *   SIMULATED: temperature readings are typed in (stand-in for an IoT sensor),
@@ -414,15 +414,6 @@ const verifyHandler = wrap(async (req) => {
 });
 app.get("/api/verify", verifyHandler);
 
-// Read-only PUBLIC server: the only thing safe to expose to an audience (via a
-// tunnel). It serves the verify page and the read-only verify API, nothing else:
-// no dashboard, no transactions, no attacks.
-const PUBLIC_PORT = process.env.PUBLIC_PORT || 3001;
-const pub = express();
-pub.get("/api/verify", verifyHandler);
-pub.get(["/", "/verify"], (req, res) => res.sendFile(path.join(__dirname, "public", "verify.html")));
-pub.use((req, res) => res.status(404).send("Not found"));
-
 // ---------------------------------------------------------------------------
 // 5. BOOT
 // ---------------------------------------------------------------------------
@@ -486,9 +477,8 @@ async function boot() {
   await fundActors();
   app.listen(PORT, () => {
     console.log(`\nDashboard:          http://localhost:${PORT}`);
-    console.log(`Public verify page: http://localhost:${PORT}/verify`);
+    console.log(`Public verify page: http://localhost:${PORT}/verify\n`);
   });
-  pub.listen(PUBLIC_PORT, () => console.log(`Read-only audience page (safe to share via a tunnel): http://localhost:${PUBLIC_PORT}\n`));
 }
 
 boot().catch((e) => {

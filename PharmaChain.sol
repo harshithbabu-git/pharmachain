@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title PharmaChain v2
+/// @title PharmaChain
 /// @notice Pharmaceutical supply-chain integrity on a public ledger:
 ///         - a regulator-controlled role registry (manufacturer / distributor / pharmacy)
 ///         - many batches, each with a hash-anchored QC certificate
